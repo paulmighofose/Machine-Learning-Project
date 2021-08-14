@@ -1,0 +1,108 @@
+---
+title: 'Personal Activity Predictive Modeling'
+author: "Paul Ighofose"
+date: "8/13/2021"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+```
+
+## About
+
+Due to technological advances, devices such as Jawbone, Nike FuelBand, and Fitbit have now made personal activity data more accessible and inexpensive to collect. The goal of this project is to utilize self-movement measurements collected by a group of enthusiasts to model and predict the class of each exercise recorded. 
+
+Access to training and testing data are provided via the following links: 
+
+Training data: 
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+Testing data: 
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+## Methods
+
+To begin, the tidyverse and caret packages were loaded into the IDE for data manipulation. A working directory was established to store initial and proceeding data. The data was uploaded and assigned a variable to begin manipulation.  
+
+Upon initial assessment, the training and testing data consisted of 160 features with 19,622 and 20 obseravations, respectively. Of those features, 66.88% of the features are of "NA" value and will not influence modeling or the predictive outcome. Thus, those features were removed to provide tidied, consistent data. 
+
+```{r, echo=FALSE }
+#Loading packages into IDE:
+library(caret)
+library(tidyverse)
+
+#Downloading data into working directory:
+#url.train <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+#url.test <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+#download.file(url.train, destfile =  "/Users/paulighofose/Desktop/Machine Learning/Train Set.csv", method = "curl")
+#download.file(url.test, destfile =  "/Users/paulighofose/Desktop/Machine Learning/Test Set.csv", method = "curl")
+
+#Uploading data sets from working directory into IDE and saving as variable: 
+train.set <- read.csv("/Users/paulighofose/desktop/Machine Learning/Train Set.csv")
+test.set <- read.csv("/Users/paulighofose/desktop/Machine Learning/Test Set.csv")
+
+#summary(train.set); #summary(test.set)
+dim(train.set); dim(test.set)
+
+
+#Tidying data (Around 95% percent of the data set is found to have "NA" values. Those coloumns appear to have minimal affect on outcome and are removed to provide clean data and a more efficient model calculation.): 
+training <- train.set %>% select(X:total_accel_belt,gyros_belt_x:total_accel_arm,gyros_arm_x:magnet_arm_z, roll_dumbbell:yaw_dumbbell,amplitude_yaw_dumbbell:total_accel_dumbbell,gyros_dumbbell_x:yaw_forearm,gyros_forearm_x:classe) %>% select(-amplitude_yaw_dumbbell,-cvtd_timestamp, -user_name, -raw_timestamp_part_1, -raw_timestamp_part_2, -new_window, -num_window)
+ 
+testing <- test.set %>% select(X:total_accel_belt,gyros_belt_x:total_accel_arm,gyros_arm_x:magnet_arm_z, roll_dumbbell:yaw_dumbbell,amplitude_yaw_dumbbell:total_accel_dumbbell,gyros_dumbbell_x:yaw_forearm,gyros_forearm_x:problem_id) %>% select(-amplitude_yaw_dumbbell,-cvtd_timestamp, -user_name, -raw_timestamp_part_1, -raw_timestamp_part_2, -new_window, -num_window)
+
+```
+
+However, upon further investigation, the testing data lacks the "classe" feature, which is vital to building a classification model upon this data set. Furthermore, this outcome could be supplemented by exploring  the quantitative data (i.e. roll_belt, yaw_dumbbell, etc.) and how it correlates to one another. Yet, doing so seems unpromising. Unpromising because the data set indicates the location of each accelerometer and gyroscope without fully specifying the exact type of barbell lift performed. For instance, one would assume for dumbbell curls the accelerometer and gyroscope would indicate heightened positive and negative movement along the "y-axis" (up and down movements), with minimal variation along the "x-axis" (left to right), if correctly performed. This is significant because to accurately determine the correlating increase and decrease of axial movements, as in a chest press with barbells, that feature should be named accordingly, to adequately describe the exercise, which implicitly infers a related axial movement. Consequentially, this is not the case and one cannot solely rely upon the quantitative data because its features are not precisely represented. 
+
+To overcome this discrepancy, the data was partitioned and a k-fold cross validation method was performed on the training data set: 
+
+  1: To yield a test data set with the "classe" outcome feature.
+  
+  2: Provide a variation in the training data to produce a more accurate model. 
+
+```{r, echo = FALSE }  
+#Inconsistencies found in testing data set. Classe variable not availble, thus prediction model is unlikely to work. Partitioning data to yield a training set and a 20 count testing set. 
+
+inTrain <- createDataPartition(y=training$classe, p= 0.000890000, list =FALSE)
+Training <- training[-inTrain,]
+Testing <- training[inTrain,]
+dim(Training);dim(Testing) 
+
+set.seed(342)
+train_control <- trainControl(method="cv", number=10)
+
+```
+
+To model the data, a generalized linear regression method would suffice, however to boost accuracy, a gradient boosting method was employed. The outcome yielded 100% accurracy, predicting correctly each class of the 20 exercises presented within the partitioned testing data set. 
+
+``` {r, echo = FALSE, include = FALSE }
+model <- train(as.factor(classe) ~ ., data = Training, trControl=train_control, method="gbm")
+```
+
+```{r}
+model
+
+#Modeling data and utilizing predictive model to determine outcome on Testing data set: 
+```
+
+``` {r, echo=FALSE}
+model$finalModel
+predictions <- predict(model,newdata=Testing)
+#predictions
+confusionMatrix(predictions,as.factor(Testing$classe))
+```
+
+```{r, echo=FALSE}
+#Creating plot to depict findings: 
+barplot(rbind(table(Testing$classe),table(predictions)), beside = T, ,col = c("dark green", "yellow"),xlab = "Classe", ylab = "Count", main = "Actual vs Predicted Personal Activity Data"); legend("topright",c( "Actual Outcome", "Model Outcome"), fill = c("dark green", "yellow"))
+```
+
+Additionally, a working model signifies an opportunity to examine its effects on unclassified data. Seeing that the model utilizes quantitative data to predict a qualitative outcome, one could theoretically utilize the model's formula to extrapolate qualitative observations on the initial test set to provide a predictive response. If correct, the projected feature should be verified with the original test set's actual exercise classifications to determine predictive modeling accuracy on extrapolated data, which produced 20 observations of type "A" classification.  
+
